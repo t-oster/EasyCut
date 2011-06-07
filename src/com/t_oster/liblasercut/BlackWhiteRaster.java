@@ -76,11 +76,10 @@ public class BlackWhiteRaster {
          */
         int[][] input = new int[src.getWidth()][2];
         for (int x = 0; x < src.getWidth(); x++) {
-            for (int y = 0; y < 1; y++) {
-                input[x][y+1] = (src.getGreyScale(x, y) & 0xFF);
-            }
+            input[x][1] = (src.getGreyScale(x, 0) & 0xFF);
+            
         }
-        for (int y = 0; y < input[0].length; y++) {
+        for (int y = 0; y < src.getHeight(); y++) {
             // copy lower line to upper line
             // and read in next line from picture
             for (int x = 0; x< input.length;x++)
