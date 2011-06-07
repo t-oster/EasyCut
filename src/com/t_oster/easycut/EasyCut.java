@@ -32,115 +32,129 @@ import java.io.File;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class EasyCut extends Activity implements OnClickListener {
+public class EasyCut extends Activity implements OnClickListener
+{
 
-    public static final int MSG_EXCEPTION = 0;
-    public static final int MSG_PROGRESSTEXT = 1;
-    
-    private static final int PICTURE_RESULT = 10;
-    private File tempFile;
-    private SelectRectView selView;
-    private Button bOk;
-    private Bitmap fullImage;
-    private ProgressDialog pd;
-    private Handler handler;
+  public static final int MSG_EXCEPTION = 0;
+  public static final int MSG_PROGRESSTEXT = 1;
+  private static final int PICTURE_RESULT = 10;
+  private File tempFile;
+  private SelectRectView selView;
+  private Button bOk;
+  private Bitmap fullImage;
+  private ProgressDialog pd;
+  private Handler handler;
 
-    /** Called when the activity is first created. */
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-         this.handler = new Handler(){
-            @Override
-            public void handleMessage(Message m)
-            {
-                switch(m.what)
-                {
-                    case MSG_EXCEPTION:
-                        Toast.makeText(EasyCut.this, "Exception: "+m.obj, Toast.LENGTH_SHORT).show();
-                        break;
-                    case MSG_PROGRESSTEXT:
-                        pd.setMessage(m.obj.toString());
-                        break;
-                }
-            }
-         };
-        setContentView(R.layout.main);
-        Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        tempFile = new File(Environment.getExternalStorageDirectory() + "/make_machine_example.jpg");
-        camera.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(tempFile));
-        this.startActivityForResult(camera, PICTURE_RESULT);
-       
-    }
+  /** Called when the activity is first created. */
+  @Override
+  public void onCreate(Bundle savedInstanceState)
+  {
+    super.onCreate(savedInstanceState);
+    this.handler = new Handler()
+    {
 
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == PICTURE_RESULT) //
+      @Override
+      public void handleMessage(Message m)
+      {
+        switch (m.what)
         {
-            if (resultCode == Activity.RESULT_OK) {
-                // Display image received on the view
-                fullImage = BitmapFactory.decodeFile(tempFile.getAbsolutePath());
-                selView = new SelectRectView(this);
-                selView.setImageBitmap(fullImage);
-                bOk = new Button(this);
-                bOk.setText("OK");
-                bOk.setOnClickListener(this);
-                LinearLayout ll = new LinearLayout(this);
-                ll.addView(bOk);
-                ll.addView(selView);
+          case MSG_EXCEPTION:
+            Toast.makeText(EasyCut.this, "Exception: " + m.obj, Toast.LENGTH_SHORT).show();
+            break;
+          case MSG_PROGRESSTEXT:
+            pd.setMessage(m.obj.toString());
+            break;
+        }
+      }
+    };
+    setContentView(R.layout.main);
+    Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+    tempFile = new File(Environment.getExternalStorageDirectory() + "/make_machine_example.jpg");
+    camera.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(tempFile));
+    this.startActivityForResult(camera, PICTURE_RESULT);
 
-                setContentView(ll);
-            } else if (resultCode == Activity.RESULT_CANCELED) {
+  }
+
+  @Override
+  public void onActivityResult(int requestCode, int resultCode, Intent data)
+  {
+    if (requestCode == PICTURE_RESULT) //
+    {
+      if (resultCode == Activity.RESULT_OK)
+      {
+        // Display image received on the view
+        fullImage = BitmapFactory.decodeFile(tempFile.getAbsolutePath());
+        selView = new SelectRectView(this);
+        selView.setImageBitmap(fullImage);
+        bOk = new Button(this);
+        bOk.setText("OK");
+        bOk.setOnClickListener(this);
+        LinearLayout ll = new LinearLayout(this);
+        ll.addView(bOk);
+        ll.addView(selView);
+
+        setContentView(ll);
+      }
+      else
+      {
+        if (resultCode == Activity.RESULT_CANCELED)
+        {
+        }
+      }
+    }
+  }
+
+  public void onClick(View view)
+  {
+    if (view.equals(bOk))
+    {
+      pd = ProgressDialog.show(this, "Please wait", "processing", true, false);
+      new Thread()
+      {
+
+        @Override
+        public void run()
+        {
+          int x = (int) (selView.getSelectedX() * fullImage.getWidth() / 100);
+          int y = (int) (selView.getSelectedY() * fullImage.getHeight() / 100);
+          int w = (int) (selView.getSelectedWidth() * fullImage.getWidth() / 100);
+          int h = (int) (selView.getSelectedHeight() * fullImage.getHeight() / 100);
+          try
+          {
+            int dpi = 500;
+            int ewidth = (int) Util.mm2px(50, dpi);
+            int eheight = (int) (h * ewidth / w);
+
+            Matrix m = new Matrix();
+            RectF src = new RectF(x, y, x + w, y + h);
+            RectF dst = new RectF(0, 0, ewidth, eheight);
+            if (!m.setRectToRect(src, dst, Matrix.ScaleToFit.CENTER))
+            {
+              throw new Exception("Passt nicht");
             }
-        }
-    }
+            EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Scaling..."));
+            //Bitmap testScale = Bitmap.createScaledBitmap(fullImage, endwidth, endheight, true);
+            Bitmap selection = Bitmap.createBitmap(fullImage, x, y, w, h, m, false);
+            EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Dithering..."));
 
-    public void onClick(View view) {
-        if (view.equals(bOk)) {
-            pd = ProgressDialog.show(this, "Please wait", "processing", true, false);
-            new Thread() {
+            //Bitmap scaled = Bitmap.createScaledBitmap(selection, endwidth, endheight, true);
+            BlackWhiteRaster bwr = new BlackWhiteRaster(new BitmapAdapter(selection), BlackWhiteRaster.DITHER_FLOYD_STEINBERG);
+            RasterPart rp = new RasterPart(new EngravingProperty(40, 100));
+            EpilogCutter instance = new EpilogCutter("137.226.56.228");
+            EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Printing..."));
 
-                @Override
-                public void run() {
-                    int x = (int) (selView.getSelectedX() * fullImage.getWidth() / 100);
-                    int y = (int) (selView.getSelectedY() * fullImage.getHeight() / 100);
-                    int w = (int) (selView.getSelectedWidth() * fullImage.getWidth() / 100);
-                    int h = (int) (selView.getSelectedHeight() * fullImage.getHeight() / 100);
-                    try
-                    {
-                        int dpi = 500;
-                        int ewidth = (int) Util.mm2px(50, dpi);
-                        int eheight = (int) (h * ewidth / w);
-                        
-                        Matrix m = new Matrix();
-                        RectF src = new RectF(x,y,x+w,y+h);
-                        RectF dst = new RectF(0,0,ewidth,eheight);
-                        if (!m.setRectToRect(src, dst, Matrix.ScaleToFit.CENTER))
-                        {
-                            throw new Exception("Passt nicht");
-                        }
-                        EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT,"Scaling..."));
-                        //Bitmap testScale = Bitmap.createScaledBitmap(fullImage, endwidth, endheight, true);
-                        Bitmap selection = Bitmap.createBitmap(fullImage, x, y, w, h, m, false);
-                        EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT,"Dithering..."));
-                        
-                        //Bitmap scaled = Bitmap.createScaledBitmap(selection, endwidth, endheight, true);
-                        BlackWhiteRaster bwr = new BlackWhiteRaster(new BitmapAdapter(selection), BlackWhiteRaster.DITHER_FLOYD_STEINBERG);
-                        RasterPart rp = new RasterPart(new EngravingProperty(40, 100));
-                        EpilogCutter instance = new EpilogCutter("137.226.56.228");
-                        EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT,"Printing..."));
-                        
-                        instance.sendJob(new LaserJob("android", "bla", "bla", dpi, null, null, rp));
-                        pd.dismiss();
-                    }
-                    catch (Exception e)
-                    {
-                        pd.dismiss();
-                        EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_EXCEPTION,e));
-                    }
-                        
-                }
-            }.start();
-            
+            instance.sendJob(new LaserJob("android", "bla", "bla", dpi, null, null, rp));
+            pd.dismiss();
+          }
+          catch (Exception e)
+          {
+            pd.dismiss();
+            EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_EXCEPTION, e));
+          }
+
         }
+      }.start();
+
     }
+  }
 }
