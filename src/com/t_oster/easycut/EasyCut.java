@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
+import android.graphics.Point;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -149,7 +150,8 @@ public class EasyCut extends Activity implements OnClickListener
                 EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Scaling..."));
                 //Bitmap testScale = Bitmap.createScaledBitmap(fullImage, endwidth, endheight, true);
                 Bitmap selection = Bitmap.createBitmap(fullImage, x, y, w, h, m, false);
-                EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Dithering..."));
+                fullImage.recycle();
+		EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Dithering..."));
 
                 //Bitmap scaled = Bitmap.createScaledBitmap(selection, endwidth, endheight, true);
                 BlackWhiteRaster bwr = new BlackWhiteRaster(new BitmapAdapter(selection), da, new ProgressListener()
@@ -165,6 +167,7 @@ public class EasyCut extends Activity implements OnClickListener
                   }
                 });
                 RasterPart rp = new RasterPart(new EngravingProperty(40, 100));
+                rp.addImage(bwr, new Point(0,0));
                 EpilogCutter instance = new EpilogCutter("137.226.56.228");
                 EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Printing..."));
 
