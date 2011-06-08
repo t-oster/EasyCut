@@ -22,13 +22,13 @@ public class BitmapAdapter implements GreyscaleRaster
     this.src = src;
   }
 
-  public Byte getGreyScale(int x, int line)
+  public int getGreyScale(int x, int line)
   {
     int col = this.src.getPixel(x, line);
-    return ((byte) ((0.3 * Color.red(col) + 0.59 * Color.green(col) + 0.11 * Color.blue(col)) / 3));
+    return (int) (0.3 * Color.red(col) + 0.59 * Color.green(col) + 0.11 * Color.blue(col));
   }
 
-  public void setGreyScale(int x, int y, Byte grey)
+  public void setGreyScale(int x, int y, int grey)
   {
     int col = Color.rgb(grey, grey, grey);
     this.src.setPixel(x, y, col);
