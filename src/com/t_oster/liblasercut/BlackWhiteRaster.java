@@ -1,27 +1,56 @@
 package com.t_oster.liblasercut;
 
+import java.util.Random;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 /**
  *
  * @author thommy
  */
-public class BlackWhiteRaster
+public class BlackWhiteRaster extends TimeIntensiveOperation
 {
 
-  public static final int DITHER_FLOYD_STEINBERG = 1;
+  public static enum DitherAlgorithm
+  {
+
+    FLOYD_STEINBERG,
+    AVERAGE,
+    RANDOM,
+    ORDERED,}
   int width;
   int height;
   private byte[][] raster;
 
-  public BlackWhiteRaster(GreyscaleRaster src, int dither_algorithm)
+  public BlackWhiteRaster(GreyscaleRaster src, DitherAlgorithm dither_algorithm, ProgressListener listener)
   {
+    if (listener != null)
+    {
+      this.addProgressListener(listener);
+    }
     this.width = src.getWidth();
     this.height = src.getHeight();
     raster = new byte[(src.getWidth() + 7) / 8][src.getHeight()];
     switch (dither_algorithm)
     {
-      case DITHER_FLOYD_STEINBERG:
+      case FLOYD_STEINBERG:
         ditherFloydSteinberg(src);
+        break;
+      case AVERAGE:
+        ditherAverage(src);
+        break;
+      case RANDOM:
+        ditherRandom(src);
+        break;
+      case ORDERED:
+        ditherOrdered(src);
+        break;
     }
+  }
+
+  public BlackWhiteRaster(GreyscaleRaster src, DitherAlgorithm dither_algorithm)
+  {
+    this(src, dither_algorithm, null);
   }
 
   public BlackWhiteRaster(int width, int height, byte[][] raster)
@@ -74,8 +103,17 @@ public class BlackWhiteRaster
     return height;
   }
 
+  private int progress = 0;
+  private void setProgress(int progress){
+    if (progress != this.progress){
+      this.progress = progress;
+      this.fireProgressChanged(this.progress);
+    }
+  }
+  
   private void ditherFloydSteinberg(GreyscaleRaster src)
   {
+    int pixelcount = 0;
     /**
      * We have to copy the input image, because we will
      * alter the pixels during dither process and don't want
@@ -85,7 +123,6 @@ public class BlackWhiteRaster
     for (int x = 0; x < src.getWidth(); x++)
     {
       input[x][1] = (src.getGreyScale(x, 0) & 0xFF);
-
     }
     for (int y = 0; y < src.getHeight(); y++)
     {
@@ -118,6 +155,115 @@ public class BlackWhiteRaster
           if (x > 0)
           {
             input[x - 1][1] = (input[x - 1][1] + 3 * error / 16);
+          }
+        }
+      }
+      setProgress((100 * pixelcount++) / (height));
+    }
+  }
+
+  private void ditherAverage(GreyscaleRaster src)
+  {
+    int lumTotal = 0;
+    int pixelcount = 0;
+
+    for (int y = 0; y < height; y++)
+    {
+      for (int x = 0; x < width; x++)
+      {
+        lumTotal += src.getGreyScale(x, y);
+      }
+      setProgress((100 * pixelcount++) / (2 * height));
+    }
+
+    float thresh = lumTotal / height / width;
+    for (int y = 0; y < height; y++)
+    {
+      for (int x = 0; x < width; x++)
+      {
+        this.setBlack(x, y, src.getGreyScale(x, y) < thresh);
+      }
+      setProgress((100 * pixelcount++) / (2 * height));
+    }
+  }
+
+  private void ditherRandom(GreyscaleRaster src)
+  {
+    int pixelcount = 0;
+    Random r = new Random();
+
+    for (int y = 0; y < height; y++)
+    {
+      for (int x = 0; x < width; x++)
+      {
+        this.setBlack(x, y, src.getGreyScale(x, y) < r.nextInt(256));
+      }
+      setProgress((100 * pixelcount++) / (height));
+    }
+  }
+
+  private void ditherOrdered(GreyscaleRaster src)
+  {
+    int nPatWid = 4;
+    int[][] filter =
+    {
+      {
+        16, 144, 48, 176
+      },
+      {
+        208, 80, 240, 112
+      },
+      {
+        64, 192, 32, 160
+      },
+      {
+        256, 128, 224, 96
+      },
+    };
+
+    int x = 0;
+    int y = 0;
+    int pixelcount = 0;
+
+    for (y = 0; y < (height - nPatWid); y = y + nPatWid)
+    {
+      
+      for (x = 0; x < (width - nPatWid); x = x + nPatWid)
+      {
+
+        for (int xdelta = 0; xdelta < nPatWid; xdelta++)
+        {
+          for (int ydelta = 0; ydelta < nPatWid; ydelta++)
+          {
+            this.setBlack(x + xdelta, y + ydelta, src.getGreyScale(x + xdelta, y + ydelta) < filter[xdelta][ydelta]);
+          }
+        }
+      }
+      for (int xdelta = 0; xdelta < nPatWid; xdelta++)
+      {
+        for (int ydelta = 0; ydelta < nPatWid; ydelta++)
+        {
+
+          if (((x + xdelta) < width) && ((y + ydelta) < height))
+          {
+            this.setBlack(x + xdelta, y + ydelta, src.getGreyScale(x + xdelta, y + ydelta) < filter[xdelta][ydelta]);
+          }
+        }
+      }
+      setProgress((100 * pixelcount++) / (height));
+    }
+
+    // y is at max; loop through x
+    for (x = 0; x < (width); x = x + nPatWid)
+    {
+      for (int xdelta = 0; xdelta < nPatWid; xdelta++)
+      {
+        for (int ydelta = 0; ydelta < nPatWid; ydelta++)
+        {
+
+          if (((x + xdelta) < width) && ((y + ydelta) < height))
+          {
+            this.setBlack(x + xdelta, y + ydelta, src.getGreyScale(x + xdelta, y + ydelta) < filter[xdelta][ydelta]);
           }
         }
       }

@@ -48,6 +48,57 @@ public class SelectRectView extends ImageView
   {
     return height;
   }
+
+  private void fixBounds()
+  {
+    if (x < 0)
+    {
+      x = 0;
+    }
+    if (y < 0)
+    {
+      y = 0;
+    }
+    if (x > 90)
+    {
+      x = 90;
+    }
+    if (y > 90)
+    {
+      y = 90;
+    }
+    if (width < 5)
+    {
+      width = 5;
+    }
+    if (height < 5)
+    {
+      height = 5;
+    }
+    if (x + width > 100)
+    {
+      if (moving)
+      {
+        x = 100 - width;
+      }
+      else
+      {
+        width = 100 - x;
+      }
+    }
+    if (y + height > 100)
+    {
+      if (moving)
+      {
+        y = 100 - height;
+      }
+      else
+      {
+        height = 100 - y;
+      }
+
+    }
+  }
   /**
    * indicates wether we're moving
    * or resizing the selected area
@@ -97,6 +148,7 @@ public class SelectRectView extends ImageView
         break;
       }
     }
+    fixBounds();
     return true;
   }
 
@@ -104,8 +156,8 @@ public class SelectRectView extends ImageView
   public void onDraw(Canvas c)
   {
     super.onDraw(c);
-    int w = c.getWidth();
-    int h = c.getHeight();
+    int w = this.getWidth();
+    int h = this.getHeight();
     Paint p = new Paint();
     p.setStrokeWidth(3);
     p.setColor(Color.YELLOW);

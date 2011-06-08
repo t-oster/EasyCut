@@ -1,7 +1,9 @@
 package com.t_oster.easycut;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -16,21 +18,18 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import com.t_oster.liblasercut.BlackWhiteRaster;
 import com.t_oster.liblasercut.EngravingProperty;
-import com.t_oster.liblasercut.IllegalJobException;
 import com.t_oster.liblasercut.LaserJob;
 import com.t_oster.liblasercut.RasterPart;
 import com.t_oster.liblasercut.epilog.EpilogCutter;
 import com.t_oster.util.BitmapAdapter;
 import com.t_oster.util.Util;
-import android.graphics.Point;
-import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Message;
+import android.widget.Spinner;
 import android.widget.Toast;
+import com.t_oster.liblasercut.ProgressListener;
 import java.io.File;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class EasyCut extends Activity implements OnClickListener
 {
@@ -44,6 +43,7 @@ public class EasyCut extends Activity implements OnClickListener
   private Bitmap fullImage;
   private ProgressDialog pd;
   private Handler handler;
+  private Spinner spinner;
 
   /** Called when the activity is first created. */
   @Override
@@ -108,53 +108,82 @@ public class EasyCut extends Activity implements OnClickListener
   {
     if (view.equals(bOk))
     {
-      pd = ProgressDialog.show(this, "Please wait", "processing", true, false);
-      new Thread()
+
+      AlertDialog.Builder builder = new AlertDialog.Builder(this);
+      builder.setTitle("Pick a color");
+      CharSequence[] cs = new CharSequence[BlackWhiteRaster.DitherAlgorithm.values().length];
+      for (int i = 0; i < cs.length; i++)
+      {
+        cs[i] = BlackWhiteRaster.DitherAlgorithm.values()[i].toString();
+      }
+      builder.setItems(cs, new DialogInterface.OnClickListener()
       {
 
-        @Override
-        public void run()
+        public void onClick(DialogInterface dialog, int item)
         {
-          int x = (int) (selView.getSelectedX() * fullImage.getWidth() / 100);
-          int y = (int) (selView.getSelectedY() * fullImage.getHeight() / 100);
-          int w = (int) (selView.getSelectedWidth() * fullImage.getWidth() / 100);
-          int h = (int) (selView.getSelectedHeight() * fullImage.getHeight() / 100);
-          try
+          final BlackWhiteRaster.DitherAlgorithm da = BlackWhiteRaster.DitherAlgorithm.values()[item];
+          pd = ProgressDialog.show(EasyCut.this, "Please wait", "processing", true, false);
+          new Thread()
           {
-            int dpi = 500;
-            int ewidth = (int) Util.mm2px(50, dpi);
-            int eheight = (int) (h * ewidth / w);
 
-            Matrix m = new Matrix();
-            RectF src = new RectF(x, y, x + w, y + h);
-            RectF dst = new RectF(0, 0, ewidth, eheight);
-            if (!m.setRectToRect(src, dst, Matrix.ScaleToFit.CENTER))
+            @Override
+            public void run()
             {
-              throw new Exception("Passt nicht");
+              int x = (int) (selView.getSelectedX() * fullImage.getWidth() / 100);
+              int y = (int) (selView.getSelectedY() * fullImage.getHeight() / 100);
+              int w = (int) (selView.getSelectedWidth() * fullImage.getWidth() / 100);
+              int h = (int) (selView.getSelectedHeight() * fullImage.getHeight() / 100);
+              try
+              {
+                int dpi = 500;
+                int ewidth = (int) Util.mm2px(50, dpi);
+                int eheight = (int) (h * ewidth / w);
+
+                Matrix m = new Matrix();
+                RectF src = new RectF(x, y, x + w, y + h);
+                RectF dst = new RectF(0, 0, ewidth, eheight);
+                if (!m.setRectToRect(src, dst, Matrix.ScaleToFit.CENTER))
+                {
+                  throw new Exception("Passt nicht");
+                }
+                EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Scaling..."));
+                //Bitmap testScale = Bitmap.createScaledBitmap(fullImage, endwidth, endheight, true);
+                Bitmap selection = Bitmap.createBitmap(fullImage, x, y, w, h, m, false);
+                EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Dithering..."));
+
+                //Bitmap scaled = Bitmap.createScaledBitmap(selection, endwidth, endheight, true);
+                BlackWhiteRaster bwr = new BlackWhiteRaster(new BitmapAdapter(selection), da, new ProgressListener()
+                {
+
+                  public void progressChanged(Object source, int percent)
+                  {
+                    EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Dithering ("+percent+"%)"));
+                  }
+
+                  public void taskChanged(Object source, String taskName)
+                  {
+                  }
+                });
+                RasterPart rp = new RasterPart(new EngravingProperty(40, 100));
+                EpilogCutter instance = new EpilogCutter("137.226.56.228");
+                EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Printing..."));
+
+                instance.sendJob(new LaserJob("android", "bla", "bla", dpi, null, null, rp));
+                pd.dismiss();
+              }
+              catch (Exception e)
+              {
+                pd.dismiss();
+                EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_EXCEPTION, e));
+              }
+
             }
-            EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Scaling..."));
-            //Bitmap testScale = Bitmap.createScaledBitmap(fullImage, endwidth, endheight, true);
-            Bitmap selection = Bitmap.createBitmap(fullImage, x, y, w, h, m, false);
-            EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Dithering..."));
-
-            //Bitmap scaled = Bitmap.createScaledBitmap(selection, endwidth, endheight, true);
-            BlackWhiteRaster bwr = new BlackWhiteRaster(new BitmapAdapter(selection), BlackWhiteRaster.DITHER_FLOYD_STEINBERG);
-            RasterPart rp = new RasterPart(new EngravingProperty(40, 100));
-            EpilogCutter instance = new EpilogCutter("137.226.56.228");
-            EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_PROGRESSTEXT, "Printing..."));
-
-            instance.sendJob(new LaserJob("android", "bla", "bla", dpi, null, null, rp));
-            pd.dismiss();
-          }
-          catch (Exception e)
-          {
-            pd.dismiss();
-            EasyCut.this.handler.sendMessage(Message.obtain(EasyCut.this.handler, MSG_EXCEPTION, e));
-          }
+          }.start();
 
         }
-      }.start();
-
+      });
+      AlertDialog alert = builder.create();
+      alert.show();
     }
   }
 }
